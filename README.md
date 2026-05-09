@@ -3,19 +3,21 @@
 
 ---
 
-## Overview
+## What this project does
 
-This project investigates **targeted Universal Adversarial Perturbations (UAPs)** on a binary facial-attribute classifier and develops a learned defense to neutralize them.
+We generate an invisible noise filter — a Universal Adversarial Perturbation (UAP) — that fools a facial-attribute classifier into misclassifying nearly every image it sees. We then train a second network that detects and removes the filter, restoring accuracy to near-original levels. All of this is done on a **binary** classifier, extending attack and defense methods that were previously only demonstrated on multi-class problems.
 
-Unlike most adversarial-attack literature which targets categorical classifiers with hundreds of classes, we attack a **binary** classifier — specifically the *Eyeglasses* and *Male* attributes of the [CelebA](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html) dataset — and demonstrate that these simpler classifiers are equally vulnerable.
+**Tech stack:** PyTorch · ResNet-50 · CelebA · DeepFool · encoder-decoder denoiser
 
-The pipeline has three phases:
+---
 
-| Phase | What it does |
-|---|---|
-| **Attack** | Learns a single image-agnostic noise filter (UAP) via batched DeepFool that fools the classifier across the entire dataset |
-| **Defense** | Trains a lightweight Perturbation Rectifying Network (PRN) to remove the adversarial noise and restore correct predictions |
-| **Evaluation** | Reports per-attribute accuracy tables and confusion matrices for clean / attacked / defended images |
+## Key findings
+
+- **The attack is highly effective.** A single noise pattern (optimized once, applied to any image) drops eyeglasses classification from **99.47% → 28%** and gender classification from **96.97% → 44%** — without being visible to the human eye.
+- **The defense fully recovers it.** A lightweight denoiser restores both attributes to within **0.5% of the original accuracy**, with no retraining of the backbone classifier.
+- **Binary classifiers are just as vulnerable as categorical ones.** Prior UAP literature targeted classifiers with hundreds of classes. We show the same methods transfer directly to binary heads.
+- **Localized features are easier to attack.** The eyeglasses filter (ξ = 2) breaks the classifier harder than the gender filter (ξ = 10), because glasses occupy a fixed spatial region — the learned noise concentrates exactly there (see filter visualization below).
+- **Collateral damage is real but fixable.** The glasses UAP also degrades unrelated attributes (e.g. Young: −30%, Attractive: −28%). The PRN defense restores those too, recovering average accuracy across all 40 attributes from **78.49% → 88.61%**.
 
 ---
 
@@ -55,10 +57,8 @@ The UAP is targeted, but its effect leaks into correlated attributes. The PRN de
 
 Average accuracy across all non-eyeglasses features: **89.67% → 78.49%** under attack, restored to **88.61%** after defense.
 
-### Baseline accuracy across all 40 attributes
-
 <details>
-<summary>Click to expand</summary>
+<summary>Baseline accuracy across all 40 attributes</summary>
 
 | Attribute | Accuracy (%) | Attribute | Accuracy (%) | Attribute | Accuracy (%) |
 |---|---|---|---|---|---|
@@ -95,7 +95,7 @@ The UAP noise is imperceptible at its true scale (range: [−0.2488, 0.1208]). W
 
 ![Eyeglasses sample: original, attacked, denoised](assets/sample_glasses.png)
 
-The filter is invisible to the eye, yet flips the prediction from *Not Wearing Glasses* to *Wearing Glasses*. After the PRN defense the prediction is correctly restored. A slight purple hue shift is a known artifact of the MSE loss (perception-distortion trade-off).
+The filter is invisible to the eye yet flips the prediction from *Not Wearing Glasses* to *Wearing Glasses*. After the PRN defense the prediction is correctly restored. A slight purple hue shift is a known artifact of the MSE loss (perception-distortion trade-off).
 
 ### Sample images — Gender attack
 
@@ -131,7 +131,7 @@ We adapt the UAP algorithm of [Moosavi-Dezfooli et al. (CVPR 2017)](https://arxi
 
 ### Defense — Perturbation Rectifying Network (PRN)
 
-Based on [Akhtar et al. (CVPR 2018)](https://arxiv.org/abs/1711.05929), the PRN is a shallow encoder-decoder with one skip connection:
+Based on [Akhtar et al. (CVPR 2018)](https://arxiv.org/abs/1711.05929), the PRN is a lightweight denoiser inspired by the **U-Net** architecture: an encoder-decoder with a skip connection that preserves low-level spatial detail across the bottleneck.
 
 ```
 Input (3×H×W)
@@ -216,16 +216,6 @@ Options:
   --max-iter INT            DeepFool iterations per batch (default: 50)
   --overshoot FLOAT         DeepFool overshoot coefficient (default: 0.02)
 ```
-
----
-
-## Key Findings
-
-- **UAPs transfer to binary classifiers.** Both methods were originally designed for multi-class problems; we show they work equally well on binary heads.
-- **Localized features are easier to attack.** The eyeglasses filter (ξ = 2) achieves a larger accuracy drop than the gender filter (ξ = 10) because glasses occupy a concentrated spatial region, whereas gender is distributed across the whole face.
-- **PRN defense is robust.** The defense restores accuracy to within 0.5% of the clean baseline for both attributes, with no retraining of the backbone.
-- **Attack collateral damage is real but recoverable.** The glasses UAP degrades average accuracy on all other attributes by ~11%; the PRN restores it to within ~1% of the original.
-- **A hue shift artifact** (slight purple cast) appears in denoised images, consistent with the perception-distortion trade-off described by [Blau & Michaeli (CVPR 2018)](https://arxiv.org/abs/1711.06077). Adding a channel-mean loss term is a natural next step.
 
 ---
 
